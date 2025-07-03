@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Rate Gauntlet | Multi-State W-2 vs 1099 Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Harmony -->
+    <!-- Application Structure Plan: The application is structured as an interactive dashboard to guide users from high-level insights to detailed analysis. It starts with key summary metrics and an interactive simulator to immediately engage the user. A new timecard grid allows for dynamic input. This is followed by a large, clickable donut chart for cost breakdown, which is more intuitive than a static table. Subsequent sections use bar charts and info cards to visually compare daily wages and the W-2 vs. 1099 scenarios. The final section uses a clear, structured layout to explain the critical legal risks (the ABC test). This top-down, interactive approach was chosen to make the complex financial and legal information digestible, empowering users to explore "what-if" scenarios rather than just passively reading a report. -->
+    <!-- Visualization & Content Choices: 
+        1. Timecard Input: User Request -> Goal: Allow dynamic hour input -> Viz: HTML Grid/Table -> Interaction: User enters hours, all calculations update instantly. Justification: Core feature for personalization.
+        2. Dual Rate Sliders & Inputs: User Request -> Goal: Compare independent W-2 and 1099 rates with precision -> Viz: Two HTML sliders synced with number inputs -> Interaction: User adjusts sliders or types in rates to find cost parity. Justification: Enables "sweet spot" analysis with better usability.
+        3. Adjustable Workweek: User Request -> Goal: Demonstrate financial impact of workweek start day -> Viz: Dropdown Selector -> Interaction: User changes start day, all W-2 calculations update. Justification: Illustrates a key, strategic component of CA wage law.
+        4. Detailed OT Explanations: User Request -> Goal: Explain *why* OT is triggered -> Viz: Hover-activated tooltips in timecard -> Interaction: Hovering over an icon reveals a breakdown of OT reasons. Justification: Provides crucial context beyond just the numbers.
+        5. S-Corp Salary Input: User Request -> Goal: Model S-Corp tax strategy -> Viz: Number Input Field -> Interaction: User sets reasonable salary, 1099-side calculations update to reflect salary/distribution split. Justification: Enables sophisticated, real-world scenario analysis.
+        6. Adjustable 1099 OT Rules: User Request -> Goal: Allow custom 1099 contract modeling -> Viz: Number Input Fields -> Interaction: User sets OT/DT thresholds for 1099 calculations. Justification: Increases flexibility and real-world applicability of the 1099 scenario.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8F5F2;
+            color: #434242;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 320px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 400px;
+            }
+        }
+        .nav-link {
+            transition: color 0.3s, border-bottom-color 0.3s;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-link:hover, .nav-link.active {
+            color: #E07A5F;
+            border-bottom-color: #E07A5F;
+        }
+        .summary-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border: 1px solid #E5E7EB;
+        }
+        .slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #E07A5F;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type='range']::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #E07A5F;
+            cursor: pointer;
+            border-radius: 50%;
+            margin-top: -8px; 
+        }
+
+        input[type='range']::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #E07A5F;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .timecard-input {
+            transition: background-color 0.2s;
+        }
+        .timecard-input:focus {
+            background-color: #FEF3C7;
+        }
+        .tooltip-container {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+        .tooltip-trigger {
+            cursor: pointer;
+            margin-left: 6px;
+        }
+        .tooltip-content {
+            visibility: hidden;
+            width: 240px;
+            background-color: #555;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 10;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -120px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.75rem;
+            line-height: 1.2;
+        }
+        .tooltip-container:hover .tooltip-content {
+            visibility: visible;
+            opacity: 1;
+        }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+        .week-separator {
+            border-bottom: 3px solid #E07A5F;
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 shadow-sm">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex-shrink-0">
+                    <h1 class="text-xl font-bold text-gray-800">The Rate Gauntlet</h1>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#simulator" class="nav-link px-3 py-2 text-sm font-medium text-gray-600">Simulator</a>
+                        <a href="#timecard" class="nav-link px-3 py-2 text-sm font-medium text-gray-600">Timecard</a>
+                        <a href="#breakdown" class="nav-link px-3 py-2 text-sm font-medium text-gray-600">Breakdown</a>
+                        <a href="#comparison" class="nav-link px-3 py-2 text-sm font-medium text-gray-600">Net Pay</a>
+                        <a href="#legal" class="nav-link px-3 py-2 text-sm font-medium text-gray-600">Legal Risk</a>
+                        <!-- NOTE: Replace the placeholder URL with your actual PayPal.me link -->
+                        <a href="https://www.paypal.me/twbservicesllc" target="_blank" rel="noopener noreferrer" class="nav-link px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-800">Support This Tool</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <section id="simulator" class="mb-12">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-900 sm:text-4xl">Multi-State Cost & Classification Simulator</h2>
+                <p class="mt-4 max-w-3xl mx-auto text-lg text-gray-600">Select a state and adjust the variables to model total labor costs and net pay under different scenarios. Use the "Cost Delta" card to find the point of cost parity between W-2 and 1099 arrangements.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8 bg-white/50 p-6 rounded-xl border">
+                <div>
+                    <label for="stateSelect" class="block text-sm font-medium text-gray-700">State of Employment</label>
+                    <select id="stateSelect" class="mt-2 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#E07A5F] focus:border-[#E07A5F] sm:text-sm rounded-md">
+                        <option value="CA">California</option>
+                        <option value="AK">Alaska</option>
+                        <option value="NV">Nevada</option>
+                        <option value="OR">Oregon</option>
+                        <option value="WA">Washington</option>
+                        <option value="CO" disabled>Colorado (coming soon)</option>
+                        <option value="NY" disabled>New York (coming soon)</option>
+                        <option value="FL" disabled>Florida (coming soon)</option>
+                        <option value="TX" disabled>Texas (coming soon)</option>
+                    </select>
+                </div>
+                <div class="lg:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <h4 class="font-bold text-blue-800">State Law Summary:</h4>
+                    <div id="stateLawSummary" class="text-sm text-blue-700 mt-1"></div>
+                </div>
+                <div>
+                    <label for="w2RateInput" class="block text-sm font-medium text-gray-700">W-2 Worker's Base Hourly Rate</label>
+                    <div class="flex items-center space-x-2 mt-2">
+                        <input id="w2RateSlider" type="range" min="16" max="150" value="77.27" step="0.01" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex items-center border border-gray-300 rounded-md shadow-sm bg-white">
+                             <span class="text-gray-500 pl-3">$</span>
+                             <input id="w2RateInput" type="number" min="16" max="150" value="77.27" step="0.01" class="w-20 border-0 p-2 text-right focus:ring-0 font-bold">
+                        </div>
+                    </div>
+                </div>
+                 <div>
+                    <label for="c1099RateInput" class="block text-sm font-medium text-gray-700">1099 Contractor's Hourly Rate</label>
+                    <div class="flex items-center space-x-2 mt-2">
+                        <input id="c1099RateSlider" type="range" min="16" max="200" value="95.00" step="0.01" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex items-center border border-gray-300 rounded-md shadow-sm bg-white">
+                             <span class="text-gray-500 pl-3">$</span>
+                             <input id="c1099RateInput" type="number" min="16" max="200" value="95.00" step="0.01" class="w-20 border-0 p-2 text-right focus:ring-0 font-bold">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label for="wcRisk" class="block text-sm font-medium text-gray-700">Job Risk Level (Workers' Comp)</label>
+                    <select id="wcRisk" class="mt-2 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#E07A5F] focus:border-[#E07A5F] sm:text-sm rounded-md">
+                        <option value="0.35">Low Risk (e.g., Clerical)</option>
+                        <option value="5.83" selected>Moderate Risk (e.g., Event/Production Labor)</option>
+                        <option value="9.50">High Risk (e.g., Construction)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="workweekStart" class="block text-sm font-medium text-gray-700">Workweek Start Day</label>
+                    <select id="workweekStart" class="mt-2 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#E07A5F] focus:border-[#E07A5F] sm:text-sm rounded-md">
+                        <option value="0">Sunday</option>
+                        <option value="1" selected>Monday</option>
+                        <option value="2">Tuesday</option>
+                        <option value="3">Wednesday</option>
+                        <option value="4">Thursday</option>
+                        <option value="5">Friday</option>
+                        <option value="6">Saturday</option>
+                    </select>
+                </div>
+                <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="lg:col-span-1">
+                         <label for="c1099OtHours" class="block text-sm font-medium text-gray-700">1099 OT > (hrs)</label>
+                         <input type="number" id="c1099OtHours" value="10" step="0.5" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-2">
+                    </div>
+                    <div class="lg:col-span-1">
+                         <label for="c1099DtHours" class="block text-sm font-medium text-gray-700">1099 DT > (hrs)</label>
+                         <input type="number" id="c1099DtHours" value="12" step="0.5" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-2">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label for="sCorpSalary" class="block text-sm font-medium text-gray-700">S-Corp Salary ($/yr)</label>
+                        <input type="number" id="sCorpSalary" value="50000" step="1000" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-2">
+                    </div>
+                </div>
+                <div class="lg:col-span-3 mt-4 pt-4 border-t border-gray-200">
+                    <h4 class="font-bold text-gray-800 mb-2">Contractor & S-Corp Annual Business Expenses</h4>
+                     <div class="flex items-center space-x-4 mb-4">
+                        <label class="font-medium text-sm">Calculation Method:</label>
+                        <input type="radio" id="expenseMethodSimple" name="expenseMethod" value="simple" class="focus:ring-[#E07A5F] h-4 w-4 text-[#E07A5F] border-gray-300">
+                        <label for="expenseMethodSimple">Simple (%)</label>
+                        <input type="radio" id="expenseMethodItemized" name="expenseMethod" value="itemized" checked class="focus:ring-[#E07A5F] h-4 w-4 text-[#E07A5F] border-gray-300">
+                        <label for="expenseMethodItemized">Itemized</label>
+                    </div>
+
+                    <div id="simpleExpenseContainer" class="hidden">
+                        <label for="simpleExpensePercent" class="block text-sm font-medium text-gray-700">Business Expense Percentage</label>
+                        <div class="flex items-center space-x-2 mt-1">
+                            <input id="simpleExpenseSlider" type="range" min="0" max="50" value="10" step="1" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <input id="simpleExpensePercent" type="number" min="0" max="50" value="10" step="1" class="w-20 border-gray-300 rounded-md shadow-sm p-2 text-right font-bold">
+                            <span class="text-gray-500">%</span>
+                        </div>
+                    </div>
+
+                    <div id="itemizedExpenseContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div>
+                            <label for="genLiability" class="block text-sm font-medium text-gray-700">Gen. Liability Ins.</label>
+                            <input type="number" id="genLiability" value="1000" step="100" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-1">
+                        </div>
+                        <div>
+                            <label for="healthInsurance" class="block text-sm font-medium text-gray-700">Health Insurance</label>
+                            <input type="number" id="healthInsurance" value="6000" step="100" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-1">
+                        </div>
+                        <div>
+                            <label for="licensingFees" class="block text-sm font-medium text-gray-700">Licensing/Fees</label>
+                            <input type="number" id="licensingFees" value="500" step="50" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-1">
+                        </div>
+                        <div>
+                            <label for="payrollFees" class="block text-sm font-medium text-gray-700">Payroll Fees</label>
+                            <input type="number" id="payrollFees" value="600" step="50" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-1">
+                        </div>
+                         <div>
+                            <label for="softwareSubs" class="block text-sm font-medium text-gray-700">Software/Subs</label>
+                            <input type="number" id="softwareSubs" value="1200" step="100" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-1">
+                        </div>
+                        <div>
+                            <label for="taxPrep" class="block text-sm font-medium text-gray-700">Tax Prep/Acct.</label>
+                            <input type="number" id="taxPrep" value="1000" step="100" class="w-full border-gray-300 rounded-md shadow-sm p-2 mt-1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+                <div class="summary-card">
+                    <p class="text-sm font-medium text-gray-500">Total W-2 Employer Cost</p>
+                    <p id="totalCost" class="mt-1 text-3xl font-bold text-[#E07A5F]"></p>
+                </div>
+                <div class="summary-card">
+                    <p class="text-sm font-medium text-gray-500">Total 1099 Invoice</p>
+                    <p id="c1099TotalPay" class="mt-1 text-3xl font-bold text-gray-700"></p>
+                </div>
+                 <div class="summary-card">
+                    <p class="text-sm font-medium text-gray-500">W-2 Fully Loaded Rate</p>
+                    <p id="loadedRate" class="mt-1 text-3xl font-bold text-[#81B29A]"></p>
+                </div>
+                <div class="summary-card">
+                    <p class="text-sm font-medium text-gray-500">Cost Delta (W-2 vs 1099)</p>
+                    <p id="costDelta" class="mt-1 text-3xl font-bold"></p>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="timecard" class="mb-12">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-900">Interactive Timecard</h2>
+                <p class="mt-4 max-w-3xl mx-auto text-lg text-gray-600">Enter hours and change the workweek start day above to see how pay is calculated. Hover over the <span class="inline-flex items-center justify-center bg-blue-100 text-blue-800 text-xs font-medium w-5 h-5 rounded-full">?</span> icon for a detailed breakdown of W-2 overtime.</p>
+            </div>
+            <div class="summary-card p-6">
+                <div class="hidden sm:grid grid-cols-5 gap-4 mb-2 text-sm font-bold text-center text-gray-500">
+                    <span>Day #</span>
+                    <span>Day of Week</span>
+                    <span>Hours Worked</span>
+                    <span>W-2 Pay (State Rules)</span>
+                    <span>1099 Pay (Custom Rules)</span>
+                </div>
+                <div id="timecard-grid" class="space-y-3"></div>
+                <div class="mt-4 flex space-x-2">
+                    <button id="add-day-btn" class="bg-[#81B29A] text-white px-4 py-2 rounded-md hover:bg-opacity-90 transition">Add Day</button>
+                    <button id="remove-day-btn" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-opacity-90 transition">Remove Last Day</button>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="breakdown" class="mb-12">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-900">W-2 Cost Breakdown</h2>
+                <p class="mt-4 max-w-3xl mx-auto text-lg text-gray-600">The total W-2 employer cost is more than just wages. Click on a segment of the chart to see a detailed breakdown of each cost category based on the hours you entered.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                <div class="chart-container">
+                    <canvas id="costBreakdownChart"></canvas>
+                </div>
+                <div id="breakdownDetails" class="p-6 bg-white rounded-lg shadow-sm border min-h-[400px]">
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="dailyWages" class="mb-12">
+             <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-900">Daily Pay Comparison: W-2 vs. 1099</h2>
+                <p class="mt-4 max-w-3xl mx-auto text-lg text-gray-600">This chart directly compares daily earnings. Note how state-specific overtime rules (blue bars) create different pay outcomes than a simpler contract-based overtime structure (gray bars).</p>
+            </div>
+            <div class="summary-card p-6">
+                 <div class="h-96">
+                    <canvas id="dailyWageChart"></canvas>
+                 </div>
+            </div>
+        </section>
+        
+        <hr class="my-16 border-gray-200">
+
+        <section id="comparison" class="mb-12">
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-bold text-gray-900">The Net Pay Reality: A Three-Way Comparison</h2>
+                <p class="mt-4 max-w-3xl mx-auto text-lg text-gray-600">This comparison models your estimated take-home pay under three different structures. See how taxes and business strategy impact your final net earnings from the same block of work.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                <div class="summary-card space-y-3">
+                    <h3 class="text-xl font-bold text-center text-[#81B29A]">W-2 Employee</h3>
+                    <div class="flex justify-between items-center"><div id="w2Gross-label" class="tooltip-container"><span class="font-medium">Gross Wages:</span></div><span id="w2Gross" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="w2Deductions-label" class="tooltip-container"><span id="w2Deductions-text" class="font-medium"></span></div><span id="w2Deductions" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="w2IncomeTax-label" class="tooltip-container"><span class="font-medium">(-) Est. Income Tax:</span></div><span id="w2IncomeTax" class="font-bold text-lg"></span></div>
+                    <hr>
+                    <div class="flex justify-between items-center"><div id="w2Net-label" class="tooltip-container"><span class="font-bold text-lg">Est. Net Pay:</span></div><span id="w2Net" class="font-bold text-2xl text-[#81B29A]"></span></div>
+                </div>
+                <div class="summary-card space-y-3">
+                    <h3 class="text-xl font-bold text-center text-gray-700">1099 Sole Proprietor</h3>
+                    <div class="flex justify-between items-center"><div id="c1099Gross-label" class="tooltip-container"><span class="font-medium">Gross Invoice:</span></div><span id="c1099Gross" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="c1099BizEx-label" class="tooltip-container"><span class="font-medium">(-) Business Expenses:</span></div><span id="c1099BizEx" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="c1099SETax-label" class="tooltip-container"><span class="font-medium">(-) SE Tax:</span></div><span id="c1099SETax" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="c1099IncomeTax-label" class="tooltip-container"><span class="font-medium">(-) Est. Income Tax:</span></div><span id="c1099IncomeTax" class="font-bold text-lg"></span></div>
+                     <hr>
+                    <div class="flex justify-between items-center"><div id="c1099Net-label" class="tooltip-container"><span class="font-bold text-lg">Est. Net Pay:</span></div><span id="c1099Net" class="font-bold text-2xl text-gray-700"></span></div>
+                </div>
+                <div class="summary-card space-y-3">
+                    <h3 class="text-xl font-bold text-center text-[#3D405B]">1099 S-Corp Owner</h3>
+                    <div class="flex justify-between items-center"><div id="sCorpGross-label" class="tooltip-container"><span class="font-medium">Gross Invoice:</span></div><span id="sCorpGross" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="sCorpBizEx-label" class="tooltip-container"><span class="font-medium">(-) Business Expenses:</span></div><span id="sCorpBizEx" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="sCorpEmployerTax-label" class="tooltip-container"><span class="font-medium">(-) S-Corp Payroll Tax:</span></div><span id="sCorpEmployerTax" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center"><div id="sCorpSalaryPaid-label" class="tooltip-container"><span class="font-medium">Salary Paid:</span></div><span id="sCorpSalaryPaid" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="sCorpEmployeeTax-label" class="tooltip-container"><span id="sCorpDeductions-text" class="font-medium"></span></div><span id="sCorpEmployeeTax" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center"><div id="sCorpDistribution-label" class="tooltip-container"><span class="font-medium">Distribution:</span></div><span id="sCorpDistribution" class="font-bold text-lg"></span></div>
+                    <div class="flex justify-between items-center text-red-600"><div id="sCorpIncomeTax-label" class="tooltip-container"><span class="font-medium">(-) Est. Income Tax:</span></div><span id="sCorpIncomeTax" class="font-bold text-lg"></span></div>
+                    <hr>
+                    <div class="flex justify-between items-center"><div id="sCorpNet-label" class="tooltip-container"><span class="font-bold text-lg">Est. Net Pay:</span></div><span id="sCorpNet" class="font-bold text-2xl text-[#3D405B]"></span></div>
+                </div>
+            </div>
+             <div class="summary-card p-6 mt-8">
+                 <div class="h-80">
+                    <canvas id="netPayChart"></canvas>
+                 </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200">
+
+        <section id="legal">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-900">The Legal Minefield: Worker Misclassification</h2>
+                <p class="mt-4 max-w-3xl mx-auto text-lg text-gray-600">In California, the law presumes a worker is an employee. To classify them as an independent contractor, the hiring entity must prove the work relationship satisfies <span class="font-bold">all three</span> conditions of the stringent "ABC Test". Failure to meet even one prong results in an employee classification.</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div class="summary-card">
+                    <div class="flex items-center mb-4">
+                        <span class="flex items-center justify-center h-12 w-12 rounded-full bg-[#E07A5F] text-white font-bold text-2xl">A</span>
+                        <h3 class="ml-4 text-lg font-bold">Free From Control</h3>
+                    </div>
+                    <p class="text-gray-600">The worker must be free from the control and direction of the hiring entity regarding how the work is performed. <br><br><span class="font-semibold text-red-700">Likely Fails:</span> A detailed timecard with set hours implies direct control over the work schedule, which is characteristic of an employment relationship.</p>
+                </div>
+                <div class="summary-card">
+                    <div class="flex items-center mb-4">
+                        <span class="flex items-center justify-center h-12 w-12 rounded-full bg-[#81B29A] text-white font-bold text-2xl">B</span>
+                        <h3 class="ml-4 text-lg font-bold">Outside Usual Business</h3>
+                    </div>
+                    <p class="text-gray-600">The work performed must be outside the usual course of the hiring entity's business. <br><br><span class="font-semibold text-red-700">Likely Fails:</span> If the "labor" is a core part of the company's service (e.g., a production company hiring a production assistant), this prong is not met. </p>
+                </div>
+                <div class="summary-card">
+                    <div class="flex items-center mb-4">
+                        <span class="flex items-center justify-center h-12 w-12 rounded-full bg-[#F2CC8F] text-white font-bold text-2xl">C</span>
+                        <h3 class="ml-4 text-lg font-bold">Independent Business</h3>
+                    </div>
+                    <p class="text-gray-600">The worker must be customarily engaged in an independently established trade, occupation, or business of the same nature as the work performed. <br><br><span class="font-semibold text-yellow-700">Status Unclear:</span> Requires proof the worker has other clients, their own insurance, etc. Simply invoicing is not enough.</p>
+                </div>
+            </div>
+
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-800 p-6 rounded-r-lg" role="alert">
+              <h4 class="font-bold text-xl">Warning: Severe Penalties for Misclassification</h4>
+              <p class="mt-2">Willful misclassification can result in penalties of **$5,000 to $25,000 per violation**, on top of paying all back wages (including overtime), unpaid payroll taxes with interest, and workers' compensation premiums. The financial risk far outweighs any perceived savings from using a 1099 contractor.</p>
+            </div>
+        </section>
+    </main>
+    
+    <footer class="bg-gray-800 mt-16 text-center text-gray-400 text-sm py-8">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-6">
+                <!-- NOTE: Replace the placeholder URL with your actual PayPal.me link -->
+                <a href="https://www.paypal.me/twbservicesllc" target="_blank" rel="noopener noreferrer" class="inline-block bg-[#E07A5F] text-white font-bold py-2 px-6 rounded-lg hover:bg-opacity-90 transition-colors">
+                    Support The Rate Gauntlet
+                </a>
+            </div>
+            <div id="methodology" class="mb-4">
+                <h4 class="font-bold text-gray-300">Data Sources & Methodology</h4>
+                <p class="mt-1 text-xs max-w-3xl mx-auto">The calculations in The Rate Gauntlet are based on publicly available data from official government sources, including the IRS and state Departments of Labor. All tax rates and wage bases are for the 2025 tax year unless otherwise noted. This tool is for estimation and modeling purposes only.</p>
+            </div>
+            <p id="lastUpdated" class="font-semibold mb-2">Last Updated: July 2, 2025</p>
+            <p class="font-bold text-base text-gray-300">Disclaimer</p>
+            <p class="text-xs max-w-3xl mx-auto">The Rate Gauntlet is a powerful financial modeling tool, not a substitute for professional legal or tax advice. Consult with a qualified CPA or attorney to make decisions for your specific situation.</p>
+            <p class="mt-4 text-xs">&copy; 2025 TWB Services LLC. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        const stateLaws = {
+            'CA': {
+                name: 'California',
+                summary: '<b>OT:</b> Daily > 8 hrs, Weekly > 40 hrs. <b>DT:</b> Daily > 12 hrs. <b>7th Day Rule:</b> Yes. <b>PFML/SDI:</b> Yes. <b>PSL:</b> Yes.',
+                source: 'https://www.dir.ca.gov/dlse/faq_overtime.htm',
+                overtime: { daily: 8, weekly: 40, doubleTime: 12, seventhDay: true },
+                sui: { rate: 0.034, wageBase: 7000 },
+                futaCreditReduction: 0.012, 
+                pfml: { name: 'SDI', employerRate: 0, employeeRate: 0.012, wageBase: 999999 },
+                waCares: { rate: 0 },
+                psl: { accrualRate: 1 / 30 }
+            },
+            'AK': {
+                name: 'Alaska',
+                summary: '<b>OT:</b> Daily > 8 hrs, Weekly > 40 hrs. No DT or 7th day rule. No state PFML/SDI or PSL mandates.',
+                source: 'https://labor.alaska.gov/lss/whfaq.htm',
+                overtime: { daily: 8, weekly: 40, doubleTime: null, seventhDay: false },
+                sui: { rate: 0.01, wageBase: 49700 },
+                futaCreditReduction: 0,
+                pfml: { name: 'PFML', employerRate: 0, employeeRate: 0, wageBase: 0 },
+                waCares: { rate: 0 },
+                psl: { accrualRate: 0 }
+            },
+            'NV': {
+                name: 'Nevada',
+                summary: '<b>OT:</b> Weekly > 40 hrs. Daily > 8 hrs if wage < 1.5x min wage ($18/hr). No DT, 7th Day, or SDI. <b>PSL:</b> Yes (accrual).',
+                source: 'https://labor.nv.gov/uploadedFiles/labornvgov/content/Employer/2024%20Annual%20Bulletin%20-%20Daily%20Overtime%2004.01.2024.pdf',
+                overtime: { daily: 8, weekly: 40, doubleTime: null, seventhDay: false, dailyWageThresholdMultiplier: 1.5 },
+                minimumWage: 12.00,
+                sui: { rate: 0.0295, wageBase: 40100 },
+                futaCreditReduction: 0,
+                pfml: { name: 'PFML', employerRate: 0, employeeRate: 0, wageBase: 0 },
+                waCares: { rate: 0 },
+                psl: { accrualRate: 0.01923 }
+            },
+            'WA': {
+                name: 'Washington',
+                summary: '<b>OT:</b> Weekly > 40 hrs. No daily OT. <b>PFML & WA Cares:</b> Yes (shared/employee-paid). <b>PSL:</b> Yes.',
+                source: 'https://www.lni.wa.gov/workers-rights/wages/overtime/',
+                overtime: { daily: null, weekly: 40, doubleTime: null, seventhDay: false },
+                sui: { rate: 0.013, wageBase: 72800 },
+                futaCreditReduction: 0,
+                pfml: { name: 'PFML', employerRate: 0.0092 * 0.2848, employeeRate: 0.0092 * 0.7152, wageBase: 176100 },
+                waCares: { rate: 0.0058 },
+                psl: { accrualRate: 1 / 40 }
+            },
+            'OR': {
+                name: 'Oregon',
+                summary: '<b>OT:</b> Weekly > 40 hrs. No daily OT. <b>Paid Leave Oregon:</b> Yes (shared cost). <b>PSL:</b> Yes.',
+                source: 'https://www.oregon.gov/boli/employers/pages/overtime.aspx',
+                overtime: { daily: null, weekly: 40, doubleTime: null, seventhDay: false },
+                sui: { rate: 0.024, wageBase: 54300 },
+                futaCreditReduction: 0,
+                pfml: { name: 'PFML', employerRate: 0.01 * 0.40, employeeRate: 0.01 * 0.60, wageBase: 176100 },
+                waCares: { rate: 0 },
+                psl: { accrualRate: 1 / 30 }
+            }
+        };
+
+        const w2RateSlider = document.getElementById('w2RateSlider');
+        const w2RateInput = document.getElementById('w2RateInput');
+        const c1099RateSlider = document.getElementById('c1099RateSlider');
+        const c1099RateInput = document.getElementById('c1099RateInput');
+        const wcRiskSelect = document.getElementById('wcRisk');
+        const workweekStartSelect = document.getElementById('workweekStart');
+        const sCorpSalaryInput = document.getElementById('sCorpSalary');
+        const c1099OtHoursInput = document.getElementById('c1099OtHours');
+        const c1099DtHoursInput = document.getElementById('c1099DtHours');
+        const stateSelect = document.getElementById('stateSelect');
+        const stateLawSummaryEl = document.getElementById('stateLawSummary');
+        
+        const expenseMethodSimpleRadio = document.getElementById('expenseMethodSimple');
+        const expenseMethodItemizedRadio = document.getElementById('expenseMethodItemized');
+        const simpleExpenseContainer = document.getElementById('simpleExpenseContainer');
+        const itemizedExpenseContainer = document.getElementById('itemizedExpenseContainer');
+        const simpleExpenseSlider = document.getElementById('simpleExpenseSlider');
+        const simpleExpensePercent = document.getElementById('simpleExpensePercent');
+
+        const genLiabilityInput = document.getElementById('genLiability');
+        const healthInsuranceInput = document.getElementById('healthInsurance');
+        const licensingFeesInput = document.getElementById('licensingFees');
+        const payrollFeesInput = document.getElementById('payrollFees');
+        const softwareSubsInput = document.getElementById('softwareSubs');
+        const taxPrepInput = document.getElementById('taxPrep');
+
+        const totalCostEl = document.getElementById('totalCost');
+        const loadedRateEl = document.getElementById('loadedRate');
+        const c1099TotalPayEl = document.getElementById('c1099TotalPay');
+        const costDeltaEl = document.getElementById('costDelta');
+        const breakdownDetailsEl = document.getElementById('breakdownDetails');
+        
+        const w2GrossEl = document.getElementById('w2Gross');
+        const w2DeductionsEl = document.getElementById('w2Deductions');
+        const w2DeductionsTextEl = document.getElementById('w2Deductions-text');
+        const w2IncomeTaxEl = document.getElementById('w2IncomeTax');
+        const w2NetEl = document.getElementById('w2Net');
+
+        const c1099GrossEl = document.getElementById('c1099Gross');
+        const c1099BizExEl = document.getElementById('c1099BizEx');
+        const c1099SETaxEl = document.getElementById('c1099SETax');
+        const c1099IncomeTaxEl = document.getElementById('c1099IncomeTax');
+        const c1099NetEl = document.getElementById('c1099Net');
+        
+        const sCorpGrossEl = document.getElementById('sCorpGross');
+        const sCorpBizExEl = document.getElementById('sCorpBizEx');
+        const sCorpEmployerTaxEl = document.getElementById('sCorpEmployerTax');
+        const sCorpSalaryPaidEl = document.getElementById('sCorpSalaryPaid');
+        const sCorpEmployeeTaxEl = document.getElementById('sCorpEmployeeTax');
+        const sCorpDeductionsTextEl = document.getElementById('sCorpDeductions-text');
+        const sCorpDistributionEl = document.getElementById('sCorpDistribution');
+        const sCorpIncomeTaxEl = document.getElementById('sCorpIncomeTax');
+        const sCorpNetEl = document.getElementById('sCorpNet');
+
+        const timecardGrid = document.getElementById('timecard-grid');
+        const addDayBtn = document.getElementById('add-day-btn');
+        const removeDayBtn = document.getElementById('remove-day-btn');
+
+        const initialHours = [10, 12, 10, 11, 15, 12, 15, 10, 10];
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        const federalTaxRates = {
+            ficaSocialSecurity: 0.062,
+            ficaMedicare: 0.0145,
+            futaBase: 0.06,
+            futaCredit: 0.054,
+            taxableWageBase: 7000,
+            ssWageBase: 176100, // Placeholder for 2025
+        };
+
+        const otherCosts = {
+            adminOverhead: 50,
+        };
+
+        let costBreakdownChart, dailyWageChart, netPayChart;
+
+        function formatCurrency(value, sign = true) {
+            if (isNaN(value)) return '$0.00';
+            const options = { style: 'currency', currency: 'USD' };
+            if (!sign) {
+                options.signDisplay = 'never';
+            }
+            return value.toLocaleString('en-US', options);
+        }
+        
+        function createTimecardRow(dayNumber, hours) {
+            const row = document.createElement('div');
+            row.id = `timecard-row-${dayNumber}`;
+            row.className = 'grid grid-cols-3 sm:grid-cols-5 gap-4 items-center border-t sm:border-none pt-2 sm:pt-0';
+            row.innerHTML = `
+                <label for="day-${dayNumber}" class="font-medium text-gray-700 text-center sm:text-left">Day ${dayNumber}</label>
+                <span id="day-${dayNumber}-name" class="font-medium text-gray-500 text-center"></span>
+                <input type="number" id="day-${dayNumber}" min="0" max="24" step="0.25" value="${hours}" class="timecard-input w-full border-gray-300 rounded-md shadow-sm p-2 text-center">
+                <div id="day-${dayNumber}-w2pay" class="text-sm text-gray-600 text-right"></div>
+                <div id="day-${dayNumber}-1099pay" class="text-sm text-gray-600 text-right"></div>
+            `;
+            row.querySelector('input').addEventListener('input', calculateAll);
+            return row;
+        }
+
+        addDayBtn.addEventListener('click', () => {
+            const dayCount = timecardGrid.children.length;
+            timecardGrid.appendChild(createTimecardRow(dayCount + 1, 0));
+            calculateAll();
+        });
+
+        removeDayBtn.addEventListener('click', () => {
+            if (timecardGrid.children.length > 1) {
+                timecardGrid.removeChild(timecardGrid.lastChild);
+                calculateAll();
+            }
+        });
+
+        function getTimecardData() {
+            const inputs = timecardGrid.querySelectorAll('input');
+            return Array.from(inputs).map((input, index) => {
+                return { day: `Day ${index + 1}`, hours: parseFloat(input.value) || 0 };
+            });
+        }
+
+        function calculateW2Wages(timecardData, baseRate, startDayOfWeek, state) {
+            let grossWages = 0;
+            let dailyWages = [];
+            let totalHoursPeriod = 0;
+            let workweekHours = 0;
+            let daysInWorkweek = 0;
+            
+            const allRows = timecardGrid.querySelectorAll('div[id^="timecard-row-"]');
+            allRows.forEach(row => row.classList.remove('week-separator'));
+
+            const dailyOtThreshold = state.minimumWage ? state.minimumWage * state.overtime.dailyWageThresholdMultiplier : null;
+
+            timecardData.forEach((day, index) => {
+                document.getElementById(`day-${index+1}-name`).textContent = dayNames[(startDayOfWeek + index) % 7];
+                totalHoursPeriod += day.hours;
+                daysInWorkweek++;
+                
+                let regularHours = 0, otHours = 0, dtHours = 0;
+                let reasons = [];
+                const isSeventhDay = state.overtime.seventhDay && daysInWorkweek === 7;
+
+                if (isSeventhDay) {
+                    reasons.push("7th Consecutive Day Rule");
+                    otHours = Math.min(day.hours, 8);
+                    dtHours = Math.max(0, day.hours - 8);
+                } else {
+                    if (state.overtime.doubleTime) {
+                        dtHours = Math.max(0, day.hours - state.overtime.doubleTime);
+                        if (dtHours > 0) reasons.push(`Daily: > ${state.overtime.doubleTime} hours`);
+                    }
+                    
+                    let applyDailyOt = !!state.overtime.daily;
+                    if (dailyOtThreshold && baseRate >= dailyOtThreshold) {
+                        applyDailyOt = false;
+                    }
+
+                    if (applyDailyOt) {
+                        otHours = Math.max(0, day.hours - state.overtime.daily - dtHours);
+                        if (otHours > 0) reasons.push(`Daily: > ${state.overtime.daily} hours`);
+                    }
+                    
+                    regularHours = day.hours - otHours - dtHours;
+                }
+
+                const newWorkweekTotal = workweekHours + day.hours;
+                if (workweekHours < state.overtime.weekly) {
+                    const weeklyOt = Math.max(0, newWorkweekTotal - state.overtime.weekly);
+                    const dailyOtTotal = otHours + dtHours;
+                    if(weeklyOt > dailyOtTotal) {
+                        const newOt = weeklyOt - dtHours;
+                        if(newOt > otHours) reasons.push(`Weekly: > ${state.overtime.weekly} hours`);
+                        otHours = newOt;
+                        regularHours = day.hours - otHours - dtHours;
+                    }
+                } else {
+                    if(day.hours > 0) reasons.push(`Weekly: > ${state.overtime.weekly} hours`);
+                    otHours = day.hours - dtHours;
+                    regularHours = 0;
+                }
+                workweekHours = newWorkweekTotal;
+
+                const dailyPay = (regularHours * baseRate) + (otHours * baseRate * 1.5) + (dtHours * baseRate * 2);
+                grossWages += dailyPay;
+                dailyWages.push({day: `${day.day} (${dayNames[(startDayOfWeek + index) % 7]})`, pay: dailyPay, reg: regularHours, ot: otHours, dt: dtHours});
+                
+                const breakdownHtml = `
+                    <div class="font-semibold">${formatCurrency(dailyPay)}</div>
+                    <div class="text-xs flex justify-end items-center">
+                        ${regularHours > 0 ? `<span class="text-green-600">${regularHours.toFixed(1)}h</span>` : ''}
+                        ${otHours > 0 ? `<span class="text-orange-500 ml-1">${otHours.toFixed(1)}h</span>` : ''}
+                        ${dtHours > 0 ? `<span class="text-red-600 ml-1">${dtHours.toFixed(1)}h</span>` : ''}
+                        <div class="tooltip-container ml-1">
+                            <span class="tooltip-trigger inline-flex items-center justify-center bg-blue-100 text-blue-800 text-xs font-medium w-5 h-5 rounded-full">?</span>
+                            <div class="tooltip-content">
+                                <h4 class="font-bold mb-1">Overtime Reasons</h4>
+                                ${reasons.length > 0 ? reasons.map(r => `<div>- ${r}</div>`).join('') : '<div>- No Premium Pay</div>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById(`day-${index+1}-w2pay`).innerHTML = breakdownHtml;
+
+                if ((startDayOfWeek + index) % 7 === (startDayOfWeek + 6) % 7) {
+                    const rowElement = document.getElementById(`timecard-row-${index + 1}`);
+                    if (rowElement && index < timecardData.length - 1) {
+                         rowElement.classList.add('week-separator');
+                    }
+                    workweekHours = 0;
+                    daysInWorkweek = 0;
+                }
+            });
+
+            return { grossWages, dailyWages, totalHours: totalHoursPeriod };
+        }
+
+        function calculate1099Wages(timecardData, baseRate, otStart, dtStart) {
+            let grossWages = 0;
+            let dailyWages1099 = [];
+            timecardData.forEach((day, index) => {
+                const effectiveDtStart = Math.max(otStart, dtStart);
+                const dtHours = Math.max(0, day.hours - effectiveDtStart);
+                const otHours = Math.max(0, day.hours - otStart - dtHours);
+                const regularHours = day.hours - otHours - dtHours;
+                const dailyPay = (regularHours * baseRate) + (otHours * baseRate * 1.5) + (dtHours * baseRate * 2);
+                grossWages += dailyPay;
+                dailyWages1099.push({day: day.day, pay: dailyPay});
+                
+                const breakdownHtml = `
+                    <div class="font-semibold">${formatCurrency(dailyPay)}</div>
+                    <div class="text-xs flex justify-end items-center">
+                        ${regularHours > 0 ? `<span class="text-green-600">${regularHours.toFixed(1)}h</span>` : ''}
+                        ${otHours > 0 ? `<span class="text-orange-500 ml-1">${otHours.toFixed(1)}h</span>` : ''}
+                        ${dtHours > 0 ? `<span class="text-red-600 ml-1">${dtHours.toFixed(1)}h</span>` : ''}
+                    </div>
+                `;
+                document.getElementById(`day-${index+1}-1099pay`).innerHTML = breakdownHtml;
+            });
+            return { grossWages, dailyWages: dailyWages1099 };
+        }
+        
+        function addTooltip(elementId, content) {
+            const container = document.getElementById(elementId);
+            if (!container) return;
+            let tooltip = container.querySelector('.tooltip-trigger');
+            if (!tooltip) {
+                tooltip = document.createElement('span');
+                tooltip.className = 'tooltip-trigger inline-flex items-center justify-center bg-blue-100 text-blue-800 text-xs font-medium w-5 h-5 rounded-full';
+                tooltip.textContent = '?';
+                container.appendChild(tooltip);
+            }
+            let tooltipContent = container.querySelector('.tooltip-content');
+            if (!tooltipContent) {
+                 tooltipContent = document.createElement('div');
+                 tooltipContent.className = 'tooltip-content';
+                 container.appendChild(tooltipContent);
+            }
+            tooltipContent.innerHTML = content;
+        }
+
+        function calculateAll() {
+            const state = stateLaws[stateSelect.value];
+            stateLawSummaryEl.innerHTML = `${state.summary} <a href="${state.source}" target="_blank" class="text-blue-500 hover:underline">(Source)</a>`;
+
+            const w2BaseRate = parseFloat(w2RateInput.value);
+            const c1099BaseRate = parseFloat(c1099RateInput.value);
+            const wcRate = parseFloat(wcRiskSelect.value);
+            const startDayOfWeek = parseInt(workweekStartSelect.value);
+            const annualSCorpSalary = parseFloat(sCorpSalaryInput.value) || 0;
+            const ot1099Start = parseFloat(c1099OtHoursInput.value) || 10;
+            const dt1099Start = parseFloat(c1099DtHoursInput.value) || 12;
+
+            const timecardData = getTimecardData();
+
+            const w2Results = calculateW2Wages(timecardData, w2BaseRate, startDayOfWeek, state);
+            const c1099Results = calculate1099Wages(timecardData, c1099BaseRate, ot1099Start, dt1099Start);
+
+            const { grossWages, dailyWages, totalHours } = w2Results;
+
+            // Employer Taxes
+            const ficaSS = Math.min(grossWages, federalTaxRates.ssWageBase) * federalTaxRates.ficaSocialSecurity;
+            const ficaMed = grossWages * federalTaxRates.ficaMedicare;
+            const employerFica = ficaSS + ficaMed;
+
+            const effectiveFutaRate = federalTaxRates.futaBase - federalTaxRates.futaCredit + state.futaCreditReduction;
+            const futa = Math.min(grossWages, federalTaxRates.taxableWageBase) * effectiveFutaRate;
+            const sui = Math.min(grossWages, state.sui.wageBase) * state.sui.rate;
+            const employerPfml = Math.min(grossWages, state.pfml.wageBase) * state.pfml.employerRate;
+            const employerPayrollTaxes = employerFica + futa + sui + employerPfml;
+            
+            const wcPremium = (grossWages / 100) * wcRate;
+
+            const pslAccrued = totalHours * state.psl.accrualRate;
+            const pslCost = pslAccrued * w2BaseRate;
+            const adminCost = otherCosts.adminOverhead;
+            const otherMandatedCosts = pslCost + adminCost;
+
+            const totalEmployerCost = grossWages + employerPayrollTaxes + wcPremium + otherMandatedCosts;
+            const loadedRate = totalHours > 0 ? totalEmployerCost / totalHours : 0;
+            
+            const c1099Invoice = c1099Results.grossWages;
+            const costDelta = totalEmployerCost - c1099Invoice;
+
+            totalCostEl.textContent = formatCurrency(totalEmployerCost);
+            loadedRateEl.textContent = formatCurrency(loadedRate);
+            c1099TotalPayEl.textContent = formatCurrency(c1099Invoice);
+            
+            costDeltaEl.textContent = formatCurrency(costDelta);
+            costDeltaEl.classList.toggle('text-red-600', costDelta > 0);
+            costDeltaEl.classList.toggle('text-green-600', costDelta <= 0);
+
+            updateBreakdownChart({ grossWages, employerPayrollTaxes, wcPremium, otherMandatedCosts });
+            updateDailyWageChart(dailyWages, c1099Results.dailyWages, w2BaseRate);
+            
+            // W-2 Net Pay
+            const w2EmployeeFica = employerFica;
+            const w2EmployeePfml = Math.min(grossWages, state.pfml.wageBase) * state.pfml.employeeRate;
+            const w2WaCares = grossWages * state.waCares.rate;
+            const w2Deductions = w2EmployeeFica + w2EmployeePfml + w2WaCares;
+            const w2PreTax = grossWages - w2Deductions;
+            const w2IncomeTax = w2PreTax * 0.20;
+            const w2NetPay = w2PreTax - w2IncomeTax;
+            
+            document.getElementById('w2Gross').textContent = formatCurrency(grossWages);
+            document.getElementById('w2Deductions').textContent = `(${formatCurrency(w2Deductions)})`;
+            document.getElementById('w2IncomeTax').textContent = `(${formatCurrency(w2IncomeTax)})`;
+            document.getElementById('w2Net').textContent = formatCurrency(w2NetPay);
+            let w2DeductionsLabelText = '(-) FICA';
+            if (state.pfml.employeeRate > 0) w2DeductionsLabelText += ` & ${state.pfml.name}`;
+            if (state.waCares.rate > 0) w2DeductionsLabelText += ' & Cares';
+            w2DeductionsTextEl.textContent = w2DeductionsLabelText + ':';
+            addTooltip('w2Deductions-label', `Employee's share of taxes:<br><b>FICA (7.65%):</b> ${formatCurrency(w2EmployeeFica)}<br><b>${state.name} ${state.pfml.name}:</b> ${formatCurrency(w2EmployeePfml)}<br><b>WA Cares:</b> ${formatCurrency(w2WaCares)}`);
+            addTooltip('w2IncomeTax-label', `An estimated 20% tax on pre-tax income of ${formatCurrency(w2PreTax)}. Actual tax depends on individual filing status, deductions, and credits.`);
+            addTooltip('w2Net-label', `Gross Wages minus all employee-paid taxes and deductions.`);
+
+            // Contractor Business Expenses
+            const daysInPeriod = timecardData.length;
+            let proRatedBizEx = 0;
+            if (expenseMethodSimpleRadio.checked) {
+                const percent = parseFloat(simpleExpensePercent.value) / 100;
+                proRatedBizEx = c1099Invoice * percent;
+            } else {
+                const annualBizExpenses = (parseFloat(genLiabilityInput.value) || 0) + 
+                                      (parseFloat(healthInsuranceInput.value) || 0) + 
+                                      (parseFloat(licensingFeesInput.value) || 0) + 
+                                      (parseFloat(payrollFeesInput.value) || 0) +
+                                      (parseFloat(softwareSubsInput.value) || 0) +
+                                      (parseFloat(taxPrepInput.value) || 0);
+                proRatedBizEx = (annualBizExpenses / 365) * daysInPeriod;
+            }
+
+
+            // 1099 Sole Prop Net Pay
+            const c1099NetBizIncome = c1099Invoice - proRatedBizEx;
+            const c1099SeTaxBase = c1099NetBizIncome * 0.9235;
+            const c1099SeTax = c1099SeTaxBase * 0.153;
+            const c1099PreTax = c1099NetBizIncome - c1099SeTax;
+            const c1099IncomeTax = c1099PreTax * 0.20;
+            const c1099NetPay = c1099PreTax - c1099IncomeTax;
+            
+            document.getElementById('c1099Gross').textContent = formatCurrency(c1099Invoice);
+            document.getElementById('c1099BizEx').textContent = `(${formatCurrency(proRatedBizEx)})`;
+            document.getElementById('c1099SETax').textContent = `(${formatCurrency(c1099SeTax)})`;
+            document.getElementById('c1099IncomeTax').textContent = `(${formatCurrency(c1099IncomeTax)})`;
+            document.getElementById('c1099Net').textContent = formatCurrency(c1099NetPay);
+            addTooltip('c1099BizEx-label', `Pro-rated share of annual business expenses for this work period.`);
+            addTooltip('c1099SETax-label', `Self-Employment tax (15.3%) covering both employee and employer FICA shares. Calculated on 92.35% of net business income (${formatCurrency(c1099SeTaxBase)}).`);
+            addTooltip('c1099IncomeTax-label', `An estimated 20% tax on pre-tax income of ${formatCurrency(c1099PreTax)}. Actual tax depends on individual filing status, deductions, and credits.`);
+            addTooltip('c1099Net-label', `Gross Invoice minus business expenses and all taxes.`);
+
+            // S-Corp Net Pay
+            const salaryForPeriod = (annualSCorpSalary / 365) * daysInPeriod;
+            const sCorpFicaSS = Math.min(salaryForPeriod, federalTaxRates.ssWageBase) * federalTaxRates.ficaSocialSecurity;
+            const sCorpFicaMed = salaryForPeriod * federalTaxRates.ficaMedicare;
+            const sCorpEmployerFica = sCorpFicaSS + sCorpFicaMed;
+            const sCorpEmployerPfml = Math.min(salaryForPeriod, state.pfml.wageBase) * state.pfml.employerRate;
+            
+            const sCorpProfit = c1099Invoice - proRatedBizEx - salaryForPeriod - sCorpEmployerFica - sCorpEmployerPfml;
+            const sCorpDistribution = sCorpProfit > 0 ? sCorpProfit : 0;
+            
+            const sCorpEmployeeFica = sCorpEmployerFica;
+            const sCorpEmployeePfml = Math.min(salaryForPeriod, state.pfml.wageBase) * state.pfml.employeeRate;
+            const sCorpWaCares = salaryForPeriod * state.waCares.rate;
+            const sCorpEmployeeDeductions = sCorpEmployeeFica + sCorpEmployeePfml + sCorpWaCares;
+            
+            const sCorpTotalIncomeToOwner = salaryForPeriod + sCorpDistribution;
+            const sCorpIncomeTax = sCorpTotalIncomeToOwner * 0.20;
+            const sCorpNetPay = sCorpTotalIncomeToOwner - sCorpEmployeeDeductions - sCorpIncomeTax;
+
+            document.getElementById('sCorpGross').textContent = formatCurrency(c1099Invoice);
+            document.getElementById('sCorpBizEx').textContent = `(${formatCurrency(proRatedBizEx)})`;
+            document.getElementById('sCorpEmployerTax').textContent = `(${formatCurrency(sCorpEmployerFica + sCorpEmployerPfml)})`;
+            document.getElementById('sCorpSalaryPaid').textContent = formatCurrency(salaryForPeriod);
+            document.getElementById('sCorpEmployeeTax').textContent = `(${formatCurrency(sCorpEmployeeDeductions)})`;
+            document.getElementById('sCorpDistribution').textContent = formatCurrency(sCorpDistribution);
+            document.getElementById('sCorpIncomeTax').textContent = `(${formatCurrency(sCorpIncomeTax)})`;
+            document.getElementById('sCorpNet').textContent = formatCurrency(sCorpNetPay);
+            let sCorpDeductionsLabelText = '(-) FICA';
+            if (state.pfml.employeeRate > 0) sCorpDeductionsLabelText += ` & ${state.pfml.name}`;
+            if (state.waCares.rate > 0) sCorpDeductionsLabelText += ' & Cares';
+            sCorpDeductionsTextEl.textContent = sCorpDeductionsLabelText + ' on Salary:';
+            addTooltip('sCorpBizEx-label', `Pro-rated share of annual business expenses for this work period.`);
+            addTooltip('sCorpEmployerTax-label', `S-Corp's share of payroll taxes (FICA + PFML), paid only on the salary portion of ${formatCurrency(salaryForPeriod)}.`);
+            addTooltip('sCorpSalaryPaid-label', `The pro-rated portion of the annual 'reasonable salary' for this work period.`);
+            addTooltip('sCorpEmployeeTax-label', `The owner-employee's share of taxes (FICA + PFML + WA Cares), paid only on the salary portion.`);
+            addTooltip('sCorpDistribution-label', `Remaining profit after the S-Corp pays the salary, its share of payroll taxes, and business expenses. This income is not subject to payroll tax.`);
+            addTooltip('sCorpIncomeTax-label', `An estimated 20% tax on total income (Salary + Distribution) of ${formatCurrency(sCorpTotalIncomeToOwner)}. Actual tax varies.`);
+            addTooltip('sCorpNet-label', `Total income to owner minus all employee-paid taxes and estimated income tax.`);
+
+
+            updateNetPayChart(w2NetPay, c1099NetPay, sCorpNetPay);
+        }
+
+        function updateBreakdownChart(data) {
+            const chartData = {
+                labels: ['Gross Wages', 'Employer Taxes', "Worker's Comp", 'Other Costs'],
+                datasets: [{
+                    data: [data.grossWages, data.employerPayrollTaxes, data.wcPremium, data.otherMandatedCosts],
+                    backgroundColor: ['#F2CC8F', '#81B29A', '#E07A5F', '#6B7280'],
+                    borderColor: '#F8F5F2',
+                    borderWidth: 4,
+                    hoverOffset: 12
+                }]
+            };
+
+            if (costBreakdownChart) {
+                costBreakdownChart.data = chartData;
+                costBreakdownChart.update();
+            } else {
+                const ctx = document.getElementById('costBreakdownChart').getContext('2d');
+                costBreakdownChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: chartData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '60%',
+                        plugins: {
+                            legend: { position: 'bottom', labels: { padding: 20, font: { size: 14 }}},
+                             tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatCurrency(ctx.parsed)}` }}
+                        },
+                        onClick: (e, elements) => {
+                            if (elements.length === 0) return;
+                            const i = elements[0].index;
+                            document.getElementById('breakdownDetails').innerHTML = `<h3 class="text-xl font-bold mb-4">${chartData.labels[i]}</h3><p>Details for this section would be dynamically generated here based on the latest calculation.</p><p class="font-bold mt-4">Total: ${formatCurrency(chartData.datasets[0].data[i])}</p>`;
+                        }
+                    },
+                });
+            }
+             document.getElementById('breakdownDetails').innerHTML = `<h3 class="text-xl font-bold mb-4">W-2 Gross Wages</h3><p>This is the total taxable income earned by the employee before any deductions, calculated according to the selected state's overtime laws.</p><div class="space-y-2 mt-4"><div class="flex justify-between"><span>Total W-2 Wages:</span><span class="font-semibold">${formatCurrency(data.grossWages)}</span></div></div>`;
+        }
+        
+        function updateDailyWageChart(w2DailyWages, c1099DailyWages, baseRate) {
+             const labels = w2DailyWages.map(d => d.day);
+             const w2Data = w2DailyWages.map(d => d.pay);
+             const c1099Data = c1099DailyWages.map(d => d.pay);
+
+             if(dailyWageChart) {
+                dailyWageChart.data.labels = labels;
+                dailyWageChart.data.datasets[0].data = w2Data;
+                dailyWageChart.data.datasets[1].data = c1099Data;
+                dailyWageChart.options.plugins.tooltip.callbacks.label = function(context) {
+                    if (context.dataset.label.startsWith('W-2')) {
+                        const index = context.dataIndex;
+                        const dayData = w2DailyWages[index];
+                        return [
+                            `Total Pay: ${formatCurrency(dayData.pay)}`,
+                            `Regular: ${dayData.reg.toFixed(1)}h`,
+                            `Overtime (1.5x): ${dayData.ot.toFixed(1)}h`,
+                            `Double Time (2.0x): ${dayData.dt.toFixed(1)}h`,
+                        ];
+                    }
+                    return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
+                };
+                dailyWageChart.update();
+             } else {
+                const ctx = document.getElementById('dailyWageChart').getContext('2d');
+                dailyWageChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: { 
+                        labels: labels, 
+                        datasets: [
+                            { label: 'W-2 Pay (State Rules)', data: w2Data, backgroundColor: '#81B29A', borderRadius: 4 },
+                            { label: '1099 Pay (Custom Rules)', data: c1099Data, backgroundColor: '#6B7280', borderRadius: 4 }
+                        ] 
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom' },
+                            tooltip: {
+                                callbacks: {
+                                    title: (context) => `Details for ${context[0].label}`,
+                                    label: function(context) {
+                                        if (context.dataset.label.startsWith('W-2')) {
+                                            const index = context.dataIndex;
+                                            const dayData = w2DailyWages[index];
+                                            return [
+                                                `Total Pay: ${formatCurrency(dayData.pay)}`,
+                                                `Regular: ${dayData.reg.toFixed(1)}h`,
+                                                `Overtime (1.5x): ${dayData.ot.toFixed(1)}h`,
+                                                `Double Time (2.0x): ${dayData.dt.toFixed(1)}h`,
+                                            ];
+                                        }
+                                        return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: { y: { beginAtZero: true, ticks: { callback: (value) => formatCurrency(value) }}}
+                    }
+                });
+             }
+        }
+
+        function updateNetPayChart(w2, c1099, sCorp) {
+            const data = [w2, c1099, sCorp];
+            if(netPayChart) {
+                netPayChart.data.datasets[0].data = data;
+                netPayChart.update();
+            } else {
+                const ctx = document.getElementById('netPayChart').getContext('2d');
+                netPayChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['W-2 Employee', '1099 Sole Prop', '1099 S-Corp'],
+                        datasets: [{ label: 'Estimated Net Take-Home Pay', data: data, backgroundColor: ['#81B29A', '#6B7280', '#3D405B'], barPercentage: 0.5, borderRadius: 4 }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: { legend: { display: false }},
+                        scales: { x: { ticks: { callback: (value) => formatCurrency(value) }}}
+                    }
+                });
+            }
+        }
+        
+        function toggleExpenseMethod() {
+            if (expenseMethodSimpleRadio.checked) {
+                simpleExpenseContainer.style.display = 'block';
+                itemizedExpenseContainer.style.display = 'none';
+            } else {
+                simpleExpenseContainer.style.display = 'none';
+                itemizedExpenseContainer.style.display = 'grid';
+            }
+            calculateAll();
+        }
+
+        w2RateSlider.addEventListener('input', () => { w2RateInput.value = w2RateSlider.value; calculateAll(); });
+        w2RateInput.addEventListener('input', () => { w2RateSlider.value = w2RateInput.value; calculateAll(); });
+        c1099RateSlider.addEventListener('input', () => { c1099RateInput.value = c1099RateSlider.value; calculateAll(); });
+        c1099RateInput.addEventListener('input', () => { c1099RateSlider.value = c1099RateInput.value; calculateAll(); });
+        simpleExpenseSlider.addEventListener('input', () => { simpleExpensePercent.value = simpleExpenseSlider.value; calculateAll(); });
+        simpleExpensePercent.addEventListener('input', () => { simpleExpenseSlider.value = simpleExpensePercent.value; calculateAll(); });
+        
+        expenseMethodSimpleRadio.addEventListener('change', toggleExpenseMethod);
+        expenseMethodItemizedRadio.addEventListener('change', toggleExpenseMethod);
+
+        const otherInputs = [wcRiskSelect, workweekStartSelect, sCorpSalaryInput, c1099OtHoursInput, c1099DtHoursInput, stateSelect, genLiabilityInput, healthInsuranceInput, licensingFeesInput, payrollFeesInput, softwareSubsInput, taxPrepInput];
+        otherInputs.forEach(input => input.addEventListener('input', calculateAll));
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            timecardGrid.innerHTML = '';
+            initialHours.forEach((h, i) => {
+                timecardGrid.appendChild(createTimecardRow(i + 1, h));
+            });
+            calculateAll();
+        });
+    </script>
+</body>
+</html>
