@@ -1,4 +1,6 @@
 About The Project
+
+
 This tool was built to demystify the complex and often misunderstood costs associated with hiring labor in the United States. It goes beyond simple hourly rates to provide a comprehensive financial analysis from two critical perspectives: the total cost to the hiring entity and the final take-home pay for the worker.
 
 By allowing users to model scenarios across different states and under various legal classifications (W-2, 1099 Sole Proprietor, 1099 S-Corp), The Rate Gauntlet empowers both businesses and independent workers to make more informed financial decisions.
